@@ -6,8 +6,6 @@ import Employees from "./Employees";
 
 import Landing from "./Landing";
 
-import Index from "./Index";
-
 import Settings from "./Settings";
 
 import Shifts from "./Shifts";
@@ -23,27 +21,25 @@ import TestSms from "./TestSms";
 import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
 
 const PAGES = {
-    
+
     Dashboard: Dashboard,
-    
+
     Employees: Employees,
-    
+
     Landing: Landing,
-    
-    Index: Index,
-    
+
     Settings: Settings,
-    
+
     Shifts: Shifts,
-    
+
     Schedule: Schedule,
-    
+
     AdminDashboard: AdminDashboard,
-    
+
     MissionControlPage: MissionControlPage,
-    
+
     TestSms: TestSms,
-    
+
 }
 
 function _getCurrentPage(url) {
@@ -76,9 +72,7 @@ function PagesContent() {
                 <Route path="/Employees" element={<Employees />} />
                 
                 <Route path="/Landing" element={<Landing />} />
-                
-                <Route path="/Index" element={<Index />} />
-                
+
                 <Route path="/Settings" element={<Settings />} />
                 
                 <Route path="/Shifts" element={<Shifts />} />

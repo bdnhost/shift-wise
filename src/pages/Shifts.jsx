@@ -5,7 +5,9 @@ import { Organization } from '@/api/entities'; // Added Organization
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, ChevronLeft, ChevronRight, Edit2, Trash2, UserCheck, UserX, Grid3X3, Calendar, Clock, LayoutGrid, Users, MessageSquare } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, Edit2, Trash2, UserCheck, UserX, Grid3X3, Calendar, Clock, LayoutGrid, Users, MessageSquare, Download, FileText } from "lucide-react";
+import { exportShiftsToCSV, exportScheduleToHTML } from "@/utils/exportUtils";
+import { toast } from "sonner";
 import ShiftForm from "../components/shifts/ShiftForm";
 import { format, parse, addDays, subDays, startOfDay, endOfDay, differenceInMinutes } from "date-fns";
 import { he } from "date-fns/locale";
@@ -104,17 +106,22 @@ export default function ShiftsPage() {
         organization_id: currentOrganizationId // Add organization_id to shift data
       };
 
+      let savedShift;
       if (editingShift) {
-        await Shift.update(editingShift.id, dataToSave);
+        savedShift = await Shift.update(editingShift.id, dataToSave);
       } else {
-        await Shift.create(dataToSave);
+        savedShift = await Shift.create(dataToSave);
       }
       setShowFormDialog(false);
       setEditingShift(null);
       await loadData(currentOrganizationId); // Reload data for the current organization
+
+      // Return the saved shift so ShiftForm can use it for SMS automation
+      return savedShift;
     } catch (error) {
       console.error("שגיאה בשמירת משמרת:", error);
       alert("שגיאה בשמירת המשמרת. בדוק את הקונסול לפרטים.");
+      throw error; // Re-throw to let ShiftForm handle it
     }
   };
 
@@ -138,6 +145,30 @@ export default function ShiftsPage() {
   const handleOpenSmsDialog = (shift) => {
     setShiftForSms(shift);
     setShowSmsDialog(true);
+  };
+
+  const handleExportCSV = () => {
+    try {
+      exportShiftsToCSV(shiftsForSelectedDate, employees, jobRoles);
+      toast.success("הייצוא ל-CSV הושלם בהצלחה!");
+    } catch (error) {
+      console.error("Error exporting to CSV:", error);
+      toast.error("שגיאה בייצוא ל-CSV");
+    }
+  };
+
+  const handleExportSchedule = () => {
+    try {
+      exportScheduleToHTML(shiftsForSelectedDate, employees, jobRoles, {
+        startDate: format(selectedDate, "yyyy-MM-dd"),
+        endDate: format(selectedDate, "yyyy-MM-dd"),
+        title: `לוח משמרות - ${format(selectedDate, "d MMMM yyyy", { locale: he })}`
+      });
+      toast.success("פותח דף הדפסה...");
+    } catch (error) {
+      console.error("Error exporting schedule:", error);
+      toast.error("שגיאה בייצוא לוח משמרות");
+    }
   };
 
   const getEmployeeForShiftDisplay = (shift) => {
@@ -508,13 +539,33 @@ export default function ShiftsPage() {
             ניהול וצפייה במשמרות בתצוגות שונות
           </p>
         </div>
-        <Button
-          onClick={() => handleOpenFormDialog()}
-          className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg"
-        >
-          <Plus className="w-5 h-5 ml-2" />
-          צור משמרת חדשה
-        </Button>
+        <div className="flex gap-2 flex-wrap">
+          <Button
+            onClick={handleExportCSV}
+            variant="outline"
+            className="border-green-600 text-green-700 hover:bg-green-50"
+            disabled={shiftsForSelectedDate.length === 0}
+          >
+            <Download className="w-4 h-4 ml-2" />
+            ייצוא ל-CSV
+          </Button>
+          <Button
+            onClick={handleExportSchedule}
+            variant="outline"
+            className="border-purple-600 text-purple-700 hover:bg-purple-50"
+            disabled={shiftsForSelectedDate.length === 0}
+          >
+            <FileText className="w-4 h-4 ml-2" />
+            הדפסת לוח
+          </Button>
+          <Button
+            onClick={() => handleOpenFormDialog()}
+            className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg"
+          >
+            <Plus className="w-5 h-5 ml-2" />
+            צור משמרת חדשה
+          </Button>
+        </div>
       </div>
 
       {/* View Selector & Date Navigation */}

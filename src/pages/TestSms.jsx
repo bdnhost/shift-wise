@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Send, CheckCircle, AlertTriangle, MessageSquare } from 'lucide-react';
 import { sendSms } from '@/api/functions';
-import * as User from '@/api/functions/User'; // Assuming User utility path
+import { User } from '@/api/entities';
 
 export default function TestSms() {
   const [currentUser, setCurrentUser] = useState(null);

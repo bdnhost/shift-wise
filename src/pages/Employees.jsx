@@ -8,7 +8,9 @@ import { UploadFile, ExtractDataFromUploadedFile } from "@/api/integrations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, User as UserIcon, UploadCloud, FileText, Loader2, AlertTriangle, LayoutGrid, List, Users as UsersGroupIcon, DownloadCloud } from "lucide-react"; // Renamed User to UserIcon to avoid conflict
+import { Plus, Search, User as UserIcon, UploadCloud, FileText, Loader2, AlertTriangle, LayoutGrid, List, Users as UsersGroupIcon, DownloadCloud, Download } from "lucide-react"; // Renamed User to UserIcon to avoid conflict
+import { exportEmployeesToCSV } from "@/utils/exportUtils";
+import { toast } from "sonner";
 import EmployeeForm from "../components/employees/EmployeeForm";
 import EmployeeCard from "../components/employees/EmployeeCard";
 import EmployeeProfile from "../components/employees/EmployeeProfile";
@@ -270,15 +272,47 @@ export default function Employees() {
     }
   };
 
+  const handleExportEmployees = () => {
+    try {
+      exportEmployeesToCSV(filteredEmployees, allJobRolesForOrg);
+      toast.success("הייצוא הושלם בהצלחה!");
+    } catch (error) {
+      console.error("Error exporting employees:", error);
+      toast.error("שגיאה בייצוא הנתונים");
+    }
+  };
+
+
+  // Helper function to get employee's role names
+  const getEmployeeRoleNames = (employee) => {
+    if (!employee.job_role_ids || !Array.isArray(employee.job_role_ids)) {
+      return [];
+    }
+    return employee.job_role_ids.map(roleId => {
+      const role = allJobRolesForOrg.find(r => r.id === roleId);
+      return role ? role.name : null;
+    }).filter(name => name);
+  };
 
   const filteredEmployees = employees.filter(emp => {
+    // Get employee's role names for search and filter
+    const employeeRoleNames = getEmployeeRoleNames(emp);
+    const roleNamesString = employeeRoleNames.join(' ').toLowerCase();
+
     const searchMatch = `${emp.first_name} ${emp.last_name}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                       (emp.role && emp.role.toLowerCase().includes(searchTerm.toLowerCase())) ||
+                       roleNamesString.includes(searchTerm.toLowerCase()) ||
                        (emp.email && emp.email.toLowerCase().includes(searchTerm.toLowerCase()));
-    
+
     const statusMatch = statusFilter === "all" || emp.status === statusFilter;
-    const roleMatch = roleFilter === "all" || emp.role === roleFilter;
-    
+
+    // Fix role filter to use job_role_ids instead of emp.role
+    const roleMatch = roleFilter === "all" ||
+                     (emp.job_role_ids && Array.isArray(emp.job_role_ids) &&
+                      emp.job_role_ids.some(roleId => {
+                        const role = allJobRolesForOrg.find(r => r.id === roleId);
+                        return role && role.name === roleFilter;
+                      }));
+
     return searchMatch && statusMatch && roleMatch;
   });
 
@@ -337,9 +371,18 @@ export default function Employees() {
                 </div>
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
-                <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
-                  {employee.role}
-                </span>
+                <div className="flex flex-wrap gap-1">
+                  {getEmployeeRoleNames(employee).map((roleName, idx) => (
+                    <span key={idx} className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                      {roleName}
+                    </span>
+                  ))}
+                  {getEmployeeRoleNames(employee).length === 0 && (
+                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-500">
+                      ללא תפקיד
+                    </span>
+                  )}
+                </div>
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
                 <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
@@ -390,21 +433,37 @@ export default function Employees() {
 
   // Constellation View Component
   const renderConstellationView = () => {
-    const roleGroups = {
-      "מנהל": { color: "bg-purple-500", employees: [] },
-      "טבח": { color: "bg-orange-500", employees: [] },
-      "מלצר": { color: "bg-green-500", employees: [] },
-      "קופאי": { color: "bg-blue-500", employees: [] },
-      "ניקיון": { color: "bg-cyan-500", employees: [] },
-      "אחר": { color: "bg-gray-500", employees: [] }
-    };
+    // Dynamically create role groups based on actual job roles in the organization
+    const roleGroups = {};
+    const roleColors = [
+      "bg-purple-500", "bg-orange-500", "bg-green-500", "bg-blue-500",
+      "bg-cyan-500", "bg-pink-500", "bg-indigo-500", "bg-red-500",
+      "bg-yellow-500", "bg-teal-500"
+    ];
 
+    // Initialize role groups from allJobRolesForOrg
+    allJobRolesForOrg.forEach((role, index) => {
+      roleGroups[role.name] = {
+        color: roleColors[index % roleColors.length],
+        employees: [],
+        roleId: role.id
+      };
+    });
+
+    // Add "ללא תפקיד" group for employees without roles
+    roleGroups["ללא תפקיד"] = { color: "bg-gray-500", employees: [], roleId: null };
+
+    // Assign employees to their role groups (employees can appear in multiple groups)
     filteredEmployees.forEach(emp => {
-      if (roleGroups[emp.role]) {
-        roleGroups[emp.role].employees.push(emp);
+      const empRoles = getEmployeeRoleNames(emp);
+      if (empRoles.length === 0) {
+        roleGroups["ללא תפקיד"].employees.push(emp);
       } else {
-        // If role doesn't match predefined groups, add to 'אחר'
-        roleGroups["אחר"].employees.push(emp);
+        empRoles.forEach(roleName => {
+          if (roleGroups[roleName]) {
+            roleGroups[roleName].employees.push(emp);
+          }
+        });
       }
     });
 
@@ -514,6 +573,15 @@ export default function Employees() {
             onChange={handleFileUpload}
             accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" // Keep .xlsx and .xls for future if ExtractData supports them well
           />
+          <Button
+            onClick={handleExportEmployees}
+            variant="outline"
+            className="shadow-sm border-blue-500 text-blue-600 hover:bg-blue-50"
+            disabled={filteredEmployees.length === 0}
+          >
+            <Download className="w-5 h-5 ml-2" />
+            ייצוא ל-CSV
+          </Button>
           <Button
             onClick={downloadSampleCsv} // Added new button
             variant="outline"
