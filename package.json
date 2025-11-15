@@ -1,7 +1,7 @@
 {
-  "name": "base44-app",
+  "name": "shiftwise-mc",
   "private": true,
-  "version": "0.0.0",
+  "version": "3.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,7 +10,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@base44/sdk": "^0.1.2",
     "@hookform/resolvers": "^4.1.2",
     "@radix-ui/react-accordion": "^1.2.3",
     "@radix-ui/react-alert-dialog": "^1.1.6",
@@ -42,11 +41,15 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.0.0",
     "date-fns": "^3.6.0",
+    "dotenv": "^17.2.3",
     "embla-carousel-react": "^8.5.2",
     "framer-motion": "^12.4.7",
     "input-otp": "^1.4.2",
+    "localforage": "^1.10.0",
     "lucide-react": "^0.475.0",
     "next-themes": "^0.4.4",
+    "openai": "^6.9.0",
+    "pocketbase": "^0.26.3",
     "react": "^18.2.0",
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.2.0",
@@ -54,9 +57,11 @@
     "react-resizable-panels": "^2.1.7",
     "react-router-dom": "^7.2.0",
     "recharts": "^2.15.1",
+    "resend": "^6.4.2",
     "sonner": "^2.0.1",
     "tailwind-merge": "^3.0.2",
     "tailwindcss-animate": "^1.0.7",
+    "twilio": "^5.10.5",
     "vaul": "^1.1.2",
     "zod": "^3.24.2"
   },
