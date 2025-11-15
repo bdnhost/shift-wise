@@ -11,7 +11,9 @@ import { format, parseISO, isWithinInterval, getDay, isEqual } from "date-fns";
 import { JobRole } from "@/api/entities";
 import { EmployeeConstraint } from "@/api/entities";
 import { SmsAutomation } from "@/api/entities"; // Import SmsAutomation
+import { Shift } from "@/api/entities"; // Import Shift entity for overlap detection
 import { sendSms as sendSmsFunction } from "@/api/functions"; // Import sendSms function and rename it to avoid conflict
+import { findOverlappingShifts, validateShiftTimes, formatShiftTimeRange } from "@/utils/shiftUtils";
 
 export default function ShiftForm({ shift, employees, onSave, onCancel, defaultDate }) {
   const [formData, setFormData] = useState({
@@ -32,7 +34,10 @@ export default function ShiftForm({ shift, employees, onSave, onCancel, defaultD
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [employeeConstraints, setEmployeeConstraints] = useState({});
   const [constraintWarnings, setConstraintWarnings] = useState({});
+  const [overlapWarnings, setOverlapWarnings] = useState({});
+  const [allShifts, setAllShifts] = useState([]);
   const [shiftAssignedAutomation, setShiftAssignedAutomation] = useState(null);
+  const [timeValidation, setTimeValidation] = useState({ valid: true, error: null });
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -44,6 +49,10 @@ export default function ShiftForm({ shift, employees, onSave, onCancel, defaultD
         if (automations.length > 0) {
           setShiftAssignedAutomation(automations[0]);
         }
+
+        // Fetch all shifts for overlap detection
+        const shifts = await Shift.list();
+        setAllShifts(shifts);
       } catch (error) {
         console.error("Error fetching initial data for ShiftForm:", error);
       }
@@ -116,9 +125,52 @@ export default function ShiftForm({ shift, employees, onSave, onCancel, defaultD
     checkShiftConflicts();
   }, [employeeConstraints, formData.date, formData.start_time, formData.end_time]);
 
+  // Check for overlapping shifts when employees, date, or times change
+  useEffect(() => {
+    checkOverlappingShifts();
+  }, [formData.assigned_employee_ids, formData.date, formData.start_time, formData.end_time, allShifts]);
+
+  // Validate shift times
+  useEffect(() => {
+    if (formData.start_time && formData.end_time) {
+      const validation = validateShiftTimes(formData.start_time, formData.end_time);
+      setTimeValidation(validation);
+    } else {
+      setTimeValidation({ valid: true, error: null });
+    }
+  }, [formData.start_time, formData.end_time]);
+
+  const checkOverlappingShifts = () => {
+    const warnings = {};
+
+    if (!formData.date || !formData.start_time || !formData.end_time || formData.assigned_employee_ids.length === 0) {
+      setOverlapWarnings({});
+      return;
+    }
+
+    const currentShiftId = shift ? shift.id : null;
+
+    formData.assigned_employee_ids.forEach(employeeId => {
+      const overlaps = findOverlappingShifts(
+        employeeId,
+        { date: formData.date, start_time: formData.start_time, end_time: formData.end_time },
+        allShifts,
+        currentShiftId
+      );
+
+      if (overlaps.length > 0) {
+        const employee = employees.find(emp => emp.id === employeeId);
+        const overlapDetails = overlaps.map(s => `"${s.title}" (${s.start_time}-${s.end_time})`).join(', ');
+        warnings[employeeId] = `${employee?.first_name} ${employee?.last_name} כבר משובץ למשמרות: ${overlapDetails}`;
+      }
+    });
+
+    setOverlapWarnings(warnings);
+  };
+
   const checkShiftConflicts = () => {
     const warnings = {};
-    
+
     if (!formData.date || Object.keys(employeeConstraints).length === 0) {
       setConstraintWarnings({});
       return;
@@ -207,7 +259,22 @@ export default function ShiftForm({ shift, employees, onSave, onCancel, defaultD
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
+    // Validate shift times first
+    if (!timeValidation.valid) {
+      alert(`שגיאה בשעות המשמרת: ${timeValidation.error}`);
+      return;
+    }
+
+    // Check for overlap warnings
+    if (Object.keys(overlapWarnings).length > 0) {
+      const overlapMessages = Object.values(overlapWarnings).join('\n');
+      if (!window.confirm(`התנגשות משמרות!\n${overlapMessages}\n\nהאם ברצונך להמשיך למרות ההתנגשות?`)) {
+        return;
+      }
+    }
+
+    // Check for constraint warnings
     if (Object.keys(constraintWarnings).length > 0) {
       const warningMessages = Object.values(constraintWarnings).join('\n');
       if (!window.confirm(`נמצאו אילוצים:\n${warningMessages}\n\nהאם ברצונך להמשיך ולשבץ את העובדים למרות האילוצים?`)) {
@@ -351,6 +418,7 @@ export default function ShiftForm({ shift, employees, onSave, onCancel, defaultD
                 value={formData.start_time}
                 onChange={(e) => handleInputChange("start_time", e.target.value)}
                 required
+                className={!timeValidation.valid ? "border-red-500" : ""}
               />
             </div>
             <div className="space-y-2">
@@ -361,7 +429,19 @@ export default function ShiftForm({ shift, employees, onSave, onCancel, defaultD
                 value={formData.end_time}
                 onChange={(e) => handleInputChange("end_time", e.target.value)}
                 required
+                className={!timeValidation.valid ? "border-red-500" : ""}
               />
+              {!timeValidation.valid && timeValidation.error && (
+                <p className="text-xs text-red-600 flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3" />
+                  {timeValidation.error}
+                </p>
+              )}
+              {timeValidation.valid && formData.start_time && formData.end_time && (
+                <p className="text-xs text-green-600">
+                  {formatShiftTimeRange(formData.start_time, formData.end_time)}
+                </p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="required_job_role_id">תפקיד נדרש</Label>
@@ -510,6 +590,12 @@ export default function ShiftForm({ shift, employees, onSave, onCancel, defaultD
                         <div className="mt-2 p-2 bg-yellow-100 border border-yellow-300 rounded text-xs text-yellow-800">
                           <AlertTriangle className="w-3 h-3 inline mr-1" />
                           {hasWarning}
+                        </div>
+                      )}
+                      {overlapWarnings[employee.id] && (
+                        <div className="mt-2 p-2 bg-red-100 border border-red-300 rounded text-xs text-red-800">
+                          <AlertTriangle className="w-3 h-3 inline mr-1" />
+                          {overlapWarnings[employee.id]}
                         </div>
                       )}
                     </div>
