@@ -78,6 +78,7 @@ export async function initializeDefaultData() {
   try {
     // Check if organization already exists
     const existingOrgs = await getAllItems(stores.organizations);
+    let defaultOrgId = null;
 
     if (existingOrgs.length === 0) {
       // Create default organization
@@ -89,6 +90,7 @@ export async function initializeDefaultData() {
         currency: 'ILS'
       };
       await stores.organizations.setItem(defaultOrg.id, defaultOrg);
+      defaultOrgId = defaultOrg.id;
       console.log('Created default organization:', defaultOrg.name);
 
       // Create default job roles
@@ -104,6 +106,8 @@ export async function initializeDefaultData() {
         await stores.job_roles.setItem(role.id, role);
       }
       console.log('Created default job roles');
+    } else {
+      defaultOrgId = existingOrgs[0].id;
     }
 
     // Check if demo user exists
@@ -114,12 +118,22 @@ export async function initializeDefaultData() {
         email: 'demo@shiftwise.local',
         full_name: 'משתמש דמו',
         role: 'admin',
+        organization_id: defaultOrgId, // Link user to organization
         created_at: new Date().toISOString(),
         // Note: In a real app, you'd hash this password
         password: 'demo123'
       };
       await stores.users.setItem(demoUser.id, demoUser);
       console.log('Created demo user: demo@shiftwise.local / demo123');
+    } else {
+      // Update existing users without organization_id
+      for (const user of existingUsers) {
+        if (!user.organization_id && defaultOrgId) {
+          user.organization_id = defaultOrgId;
+          await stores.users.setItem(user.id, user);
+          console.log('Updated user with organization_id:', user.email);
+        }
+      }
     }
 
     return true;

@@ -144,7 +144,7 @@ export const User = {
       }
 
       const userId = session.user.id;
-      const user = await stores.users.setItem(userId);
+      const user = await stores.users.getItem(userId);
 
       if (!user) {
         throw new Error('User not found');
